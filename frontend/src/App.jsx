@@ -1,11 +1,21 @@
 // Demo dashboard entry point for the Vehicle Identity Authorization System.
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 
 import AuthorizationCheck from "./components/AuthorizationCheck.jsx";
 import InsuranceForm from "./components/InsuranceForm.jsx";
 import OwnerForm from "./components/OwnerForm.jsx";
+import RecordsPanel from "./components/RecordsPanel.jsx";
+import StatusBoard from "./components/StatusBoard.jsx";
 import VehicleForm from "./components/VehicleForm.jsx";
+import {
+  API_BASE_URL,
+  getApiErrorMessage,
+  getHealth,
+  listInsurance,
+  listOwners,
+  listVehicles,
+} from "./api.js";
 
 const styles = `
   :root {
@@ -133,6 +143,140 @@ const styles = `
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 20px;
     margin-top: 24px;
+  }
+
+  .status-board,
+  .records-panel {
+    margin-top: 24px;
+    padding: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 24px;
+    background: var(--surface);
+    backdrop-filter: blur(12px);
+    box-shadow: var(--shadow);
+  }
+
+  .status-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 18px;
+  }
+
+  .status-header h2 {
+    margin: 4px 0 0;
+    font-size: 1.35rem;
+  }
+
+  .secondary-button {
+    padding: 12px 16px;
+    border: 1px solid rgba(13, 122, 111, 0.18);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.7);
+    color: var(--ink);
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  .secondary-button:disabled {
+    opacity: 0.7;
+    cursor: wait;
+  }
+
+  .status-grid,
+  .records-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .status-card,
+  .records-card {
+    padding: 18px;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.52);
+  }
+
+  .status-card-wide {
+    grid-column: span 1;
+  }
+
+  .status-card h3,
+  .records-card h3 {
+    margin: 12px 0 8px;
+    font-size: 1.12rem;
+  }
+
+  .status-card strong {
+    display: block;
+    margin-top: 10px;
+    font-size: 2rem;
+    line-height: 1;
+  }
+
+  .status-card p,
+  .records-card p {
+    margin: 8px 0 0;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .status-positive {
+    background: var(--success-soft);
+    color: var(--success);
+  }
+
+  .status-neutral {
+    background: rgba(95, 101, 94, 0.12);
+    color: var(--muted);
+  }
+
+  .metric-label {
+    display: block;
+    color: var(--muted);
+    font-size: 0.84rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .records-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .records-item {
+    display: grid;
+    gap: 6px;
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .records-item:first-of-type {
+    padding-top: 4px;
+    border-top: 0;
+  }
+
+  .records-item strong {
+    font-size: 0.98rem;
+  }
+
+  .records-item span,
+  .records-empty {
+    color: var(--muted);
+    line-height: 1.5;
   }
 
   .panel-card {
@@ -304,11 +448,14 @@ const styles = `
 
   @media (max-width: 900px) {
     .flow-row,
-    .dashboard-grid {
+    .dashboard-grid,
+    .status-grid,
+    .records-grid {
       grid-template-columns: 1fr;
     }
 
-    .panel-header {
+    .panel-header,
+    .status-header {
       flex-direction: column;
     }
 
@@ -326,6 +473,54 @@ const styles = `
 function App() {
   const [latestOwnerId, setLatestOwnerId] = useState(null);
   const [latestVehicleId, setLatestVehicleId] = useState(null);
+  const [health, setHealth] = useState(null);
+  const [owners, setOwners] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [insurancePolicies, setInsurancePolicies] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [dashboardError, setDashboardError] = useState("");
+
+  async function refreshDashboard() {
+    setRefreshing(true);
+    setDashboardError("");
+
+    try {
+      const [healthResponse, ownersResponse, vehiclesResponse, insuranceResponse] =
+        await Promise.all([
+          getHealth(),
+          listOwners(),
+          listVehicles(),
+          listInsurance(),
+        ]);
+
+      setHealth(healthResponse.data);
+      setOwners(ownersResponse.data);
+      setVehicles(vehiclesResponse.data);
+      setInsurancePolicies(insuranceResponse.data);
+    } catch (error) {
+      setDashboardError(getApiErrorMessage(error));
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  useEffect(() => {
+    refreshDashboard();
+  }, []);
+
+  function handleOwnerCreated(owner) {
+    setLatestOwnerId(owner.id);
+    refreshDashboard();
+  }
+
+  function handleVehicleCreated(vehicle) {
+    setLatestVehicleId(vehicle.id);
+    refreshDashboard();
+  }
+
+  function handleInsuranceCreated() {
+    refreshDashboard();
+  }
 
   return (
     <>
@@ -361,18 +556,39 @@ function App() {
           </div>
         </section>
 
+        <StatusBoard
+          health={health}
+          counts={{
+            owners: owners.length,
+            vehicles: vehicles.length,
+            insurance: insurancePolicies.length,
+          }}
+          loading={refreshing}
+          errorMessage={dashboardError}
+          onRefresh={refreshDashboard}
+        />
+
+        <RecordsPanel
+          owners={owners}
+          vehicles={vehicles}
+          insurancePolicies={insurancePolicies}
+        />
+
         <main className="dashboard-grid">
-          <OwnerForm onCreated={(owner) => setLatestOwnerId(owner.id)} />
+          <OwnerForm onCreated={handleOwnerCreated} />
           <VehicleForm
             latestOwnerId={latestOwnerId}
-            onCreated={(vehicle) => setLatestVehicleId(vehicle.id)}
+            onCreated={handleVehicleCreated}
           />
-          <InsuranceForm latestVehicleId={latestVehicleId} />
+          <InsuranceForm
+            latestVehicleId={latestVehicleId}
+            onCreated={handleInsuranceCreated}
+          />
           <AuthorizationCheck latestVehicleId={latestVehicleId} />
         </main>
 
         <p className="dashboard-footer">
-          Backend API target: <strong>http://localhost:8000</strong>
+          Backend API target: <strong>{API_BASE_URL}</strong>
         </p>
       </div>
     </>
