@@ -1,6 +1,6 @@
 """Pydantic schemas for vehicle data."""
 
-from typing import Annotated
+from typing import Annotated, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
@@ -48,7 +48,7 @@ class VehicleAuthorizationResponse(BaseModel):
 class VehicleDetailResponse(VehicleResponse):
     """Schema returned for detailed vehicle records."""
 
-    owner: OwnerResponse | None = None
-    insurance: InsuranceResponse | None = None
+    owner: Optional[OwnerResponse] = None
+    insurance: Optional[InsuranceResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
